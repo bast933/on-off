@@ -1,0 +1,245 @@
+<!-- Salva questo file come public/index.html -->
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gioco della Porta</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 2rem;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .button-container {
+            display: flex;
+            justify-content: space-around;
+            margin: 30px 0;
+        }
+        button {
+            padding: 12px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .user1 {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .user2 {
+            background-color: #2196F3;
+            color: white;
+        }
+        .result {
+            background-color: #f44336;
+            color: white;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .door-image {
+            height: 200px;
+            margin: 20px 0;
+            display: none;
+        }
+        .status {
+            margin-top: 20px;
+            font-style: italic;
+            color: #666;
+        }
+        .user-info {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gioco della Porta</h1>
+        
+        <div class="user-info">
+            <label for="user-select">Seleziona il tuo ruolo:</label>
+            <select id="user-select">
+                <option value="">Scegli...</option>
+                <option value="user1">Utente 1</option>
+                <option value="user2">Utente 2</option>
+                <option value="observer">Osservatore</option>
+            </select>
+        </div>
+        
+        <div class="button-container">
+            <button id="button1" class="user1" disabled>Utente 1</button>
+            <button id="button2" class="user2" disabled>Utente 2</button>
+            <button id="resultButton" class="result" disabled>Risultato</button>
+        </div>
+        
+        <img id="doorImage" class="door-image" src="door.jpg" alt="Una porta">
+        
+        <div class="status" id="status">In attesa della connessione al server...</div>
+        
+        <div id="connectionInfo">
+            <p>ID di connessione: <span id="connectionId">...</span></p>
+            <p>Per giocare, entrambi gli utenti devono aprire questa pagina e selezionare il proprio ruolo.</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const button1 = document.getElementById('button1');
+            const button2 = document.getElementById('button2');
+            const resultButton = document.getElementById('resultButton');
+            const doorImage = document.getElementById('doorImage');
+            const statusElement = document.getElementById('status');
+            const userSelect = document.getElementById('user-select');
+            const connectionIdElement = document.getElementById('connectionId');
+            
+            let userRole = '';
+            let socket;
+            let user1Pressed = false;
+            let user2Pressed = false;
+            
+            // Determina l'URL del WebSocket (ws:// per HTTP, wss:// per HTTPS)
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}`;
+            
+            // Connessione al server WebSocket
+            function connectWebSocket() {
+                socket = new WebSocket(wsUrl);
+                
+                socket.addEventListener('open', () => {
+                    statusElement.textContent = 'Connesso! Seleziona il tuo ruolo per iniziare.';
+                });
+                
+                socket.addEventListener('message', (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        
+                        if (message.type === 'connectionId') {
+                            connectionIdElement.textContent = message.id;
+                        } 
+                        else if (message.type === 'state') {
+                            // Aggiorniamo lo stato dei pulsanti in base ai dati ricevuti
+                            user1Pressed = message.user1Pressed;
+                            user2Pressed = message.user2Pressed;
+                            
+                            if (user1Pressed) {
+                                button1.textContent = 'Premuto!';
+                                button1.disabled = true;
+                            }
+                            
+                            if (user2Pressed) {
+                                button2.textContent = 'Premuto!';
+                                button2.disabled = true;
+                            }
+                            
+                            // Se entrambi i bottoni sono stati premuti, abilita il pulsante risultato
+                            if (user1Pressed && user2Pressed) {
+                                resultButton.disabled = false;
+                                statusElement.textContent = 'Entrambi gli utenti hanno premuto i loro pulsanti! Premi "Risultato" per vedere la porta.';
+                            }
+                        }
+                        else if (message.type === 'buttonPress') {
+                            if (message.user === 'user1') {
+                                user1Pressed = true;
+                                button1.textContent = 'Premuto!';
+                                button1.disabled = true;
+                                statusElement.textContent = 'Utente 1 ha premuto il pulsante!';
+                            } else if (message.user === 'user2') {
+                                user2Pressed = true;
+                                button2.textContent = 'Premuto!';
+                                button2.disabled = true;
+                                statusElement.textContent = 'Utente 2 ha premuto il pulsante!';
+                            }
+                            
+                            // Se entrambi i bottoni sono stati premuti, abilita il pulsante risultato
+                            if (user1Pressed && user2Pressed) {
+                                resultButton.disabled = false;
+                                statusElement.textContent = 'Entrambi gli utenti hanno premuto i loro pulsanti! Premi "Risultato" per vedere la porta.';
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Errore nella gestione del messaggio:', e);
+                    }
+                });
+                
+                socket.addEventListener('close', () => {
+                    statusElement.textContent = 'Disconnesso dal server. Riconnessione in corso...';
+                    setTimeout(connectWebSocket, 3000); // Riconnessione dopo 3 secondi
+                });
+                
+                socket.addEventListener('error', (error) => {
+                    console.error('Errore WebSocket:', error);
+                    statusElement.textContent = 'Errore di connessione. Riconnessione in corso...';
+                });
+            }
+            
+            // Connettiamo al server WebSocket
+            connectWebSocket();
+            
+            userSelect.addEventListener('change', () => {
+                userRole = userSelect.value;
+                
+                // Invia il ruolo al server
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: 'setRole',
+                        role: userRole
+                    }));
+                }
+                
+                // Resetta i pulsanti
+                button1.disabled = true;
+                button2.disabled = true;
+                
+                if (userRole === 'user1' && !user1Pressed) {
+                    button1.disabled = false;
+                    statusElement.textContent = 'Sei l\'Utente 1. Premi il tuo pulsante!';
+                } else if (userRole === 'user2' && !user2Pressed) {
+                    button2.disabled = false;
+                    statusElement.textContent = 'Sei l\'Utente 2. Premi il tuo pulsante!';
+                } else if (userRole === 'observer') {
+                    statusElement.textContent = 'Sei un osservatore. Attendi che gli utenti premano i loro pulsanti.';
+                }
+            });
+            
+            button1.addEventListener('click', () => {
+                if (userRole === 'user1' && !user1Pressed) {
+                    socket.send(JSON.stringify({
+                        type: 'buttonPress',
+                        user: 'user1'
+                    }));
+                }
+            });
+            
+            button2.addEventListener('click', () => {
+                if (userRole === 'user2' && !user2Pressed) {
+                    socket.send(JSON.stringify({
+                        type: 'buttonPress',
+                        user: 'user2'
+                    }));
+                }
+            });
+            
+            resultButton.addEventListener('click', () => {
+                if (user1Pressed && user2Pressed) {
+                    doorImage.style.display = 'block';
+                    statusElement.textContent = 'Congratulazioni! Avete ottenuto la porta!';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

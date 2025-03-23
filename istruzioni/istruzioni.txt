@@ -1,0 +1,5 @@
+per funzionare
+
+1-  tasto destro in cartella radice e apri prompt qui
+2-  avvia il server     node server.js
+3-  acccedi             http://localhost:3000
